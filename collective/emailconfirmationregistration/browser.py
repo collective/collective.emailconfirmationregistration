@@ -1,23 +1,29 @@
-from Products.CMFCore.interfaces import ISiteRoot
-from zope.component import getUtility
-from Products.CMFCore.utils import getToolByName
+from datetime import datetime
+
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from BTrees.OOBTree import OOBTree
-from zope.component import getMultiAdapter
-from AccessControl import Unauthorized
-from Products.Five import BrowserView
-from plone.app.users.browser.register import RegistrationForm as BaseRegistrationForm
-from zope.formlib import form
-from zope import schema
-from zope.interface import Interface
-from time import time
-import random
+
 from hashlib import sha1
-from datetime import datetime
-from Products.statusmessages.interfaces import IStatusMessage
-from zope.formlib.interfaces import WidgetInputError
+from plone.app.users.browser.register import RegistrationForm as BaseRegistrationForm
+import random
+from time import time
 from validate_email import validate_email
+from zope import schema
+
+from zope.component import getMultiAdapter
+from zope.component import getUtility
+
+from zope.formlib import form
+from zope.formlib.interfaces import WidgetInputError
+
+from zope.interface import Interface
+
+from AccessControl import Unauthorized
+from BTrees.OOBTree import OOBTree
+from Products.statusmessages.interfaces import IStatusMessage
+from Products.CMFCore.interfaces import ISiteRoot
+from Products.CMFCore.utils import getToolByName
+from Products.Five import BrowserView
 
 
 def makeRandomCode(length=255):
