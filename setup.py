@@ -27,7 +27,7 @@ setup(name='collective.emailconfirmationregistration',
       zip_safe=False,
       install_requires=[
           'setuptools',
-          'plone.app.users',
+          'plone.app.users>=2',
           'validate_email',
           'pyDNS'
       ],

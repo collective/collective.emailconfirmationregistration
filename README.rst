@@ -18,3 +18,7 @@ address against database/API with a known list of bad emails/domains(if there is
 In any case, I'm hoping that this can be a decent OOTB method for protecting Plone's
 self-registration setting.
 
+
+Installation on plone 4.3
+-------------------------
+You will need to pin the version of plone.app.users to 2.1.0. plone.app.users 2.2.x is Plone 5 only.
