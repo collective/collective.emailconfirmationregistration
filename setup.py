@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 import os
 
-version = '1.0.1dev1'
+version = '1.0.0a1'
 
 setup(name='collective.emailconfirmationregistration',
       version=version,
