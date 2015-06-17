@@ -4,7 +4,16 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from hashlib import sha1
-from plone.app.users.browser.register import RegistrationForm as BaseRegistrationForm
+from plone.app.users.browser.register import RegistrationForm as OriginalRegistrationForm
+try:
+    from collective.registrationcaptcha.registrationform import CaptchaRegistrationForm as BaseRegistrationForm  # noqa
+except:
+    BaseRegistrationForm = OriginalRegistrationForm
+try:
+    HAS_CRC = True
+    from collective.registrationcaptcha.registrationform import CaptchaRegistrationFormExtender as BaseCaptchaRegistrationFormExtender  # noqa
+except:
+    HAS_CRC = False
 import random
 from time import time
 from validate_email import validate_email
@@ -12,9 +21,7 @@ from zope import schema
 
 from zope.component import getMultiAdapter
 from zope.component import getUtility
-
-from zope.formlib import form
-from zope.formlib.interfaces import WidgetInputError
+from zope.component import adapts
 
 from zope.interface import Interface
 
@@ -24,6 +31,14 @@ from Products.statusmessages.interfaces import IStatusMessage
 from Products.CMFCore.interfaces import ISiteRoot
 from Products.CMFCore.utils import getToolByName
 from Products.Five import BrowserView
+from plone.z3cform.fieldsets import extensible
+from z3c.form import interfaces
+from collective.emailconfirmationregistration.interfaces import ILayer
+from z3c.form.field import Fields
+from zope.event import notify
+from z3c.form.action import ActionErrorOccurred
+from z3c.form.interfaces import WidgetActionExecutionError
+from zope.interface import Invalid
 
 
 def makeRandomCode(length=255):
@@ -138,12 +153,12 @@ class RegistrationForm(BaseRegistrationForm):
 
     def get_confirmed_email(self):
         req = self.request
-        return req.form.get('confirmed_email', req.form.get('form.confirmed_email', ''))
+        return req.form.get('confirmed_email', req.form.get('form.widgets.confirmed_email', ''))
 
     def get_confirmed_code(self):
         req = self.request
         return req.form.get(
-            'confirmed_code', req.form.get('form.confirmed_code', ''))
+            'confirmed_code', req.form.get('form.widgets.confirmed_code', ''))
 
     def verify(self):
         email = self.get_confirmed_email()
@@ -158,34 +173,26 @@ class RegistrationForm(BaseRegistrationForm):
             return True
         return False
 
-    @property
-    def form_fields(self):
-        if not self.showForm:
-            # We do not want to spend time calculating fields that
-            # will never get displayed.
-            return []
-
-        fields = super(RegistrationForm, self).form_fields
-        return fields + form.Fields(IHiddenVerifiedEmail)
-
-    def setUpWidgets(self):
-        super(RegistrationForm, self).setUpWidgets()
-        self.widgets['confirmed_email'].style = 'display:none'
-        self.widgets['confirmed_code'].style = 'display:none'
-
-    def update(self):
-        super(RegistrationForm, self).update()
-        self.widgets['confirmed_email']._missing = self.get_confirmed_email()
-        self.widgets['confirmed_code']._missing = self.get_confirmed_code()
+    def updateWidgets(self):
+        super(RegistrationForm, self).updateWidgets()
+        self.widgets['confirmed_email'].value = self.get_confirmed_email()
+        self.widgets['confirmed_code'].value = self.get_confirmed_code()
 
     def validate_registration(self, action, data):
-        errors = super(RegistrationForm, self).validate_registration(action, data)
+        if 'captcha' in data:
+            super(RegistrationForm, self).validate_registration(action, data)
+        else:
+            # just because it's there, does not mean it's configured
+            OriginalRegistrationForm.validate_registration(self, action, data)
         if data['email'].lower() != self.get_confirmed_email().lower():
             err_str = u'Email address you have entered does not match email used in verification'
-            errors.append(WidgetInputError(
-                'email', u'label_email', err_str))
-            self.widgets['email'].error = err_str
-        return errors
+            notify(
+                ActionErrorOccurred(
+                    action, WidgetActionExecutionError('email', Invalid(err_str))
+                )
+            )
+        del data['confirmed_email']
+        del data['confirmed_code']
 
     def __call__(self):
         if not self.verify():
@@ -193,3 +200,25 @@ class RegistrationForm(BaseRegistrationForm):
                 self.context.absolute_url()))
 
         return super(RegistrationForm, self).__call__()
+
+
+class EmailConfirmationFormExtender(extensible.FormExtender):
+    """Registrationform extender to extend it with the captcha schema.
+    """
+    adapts(Interface, ILayer, RegistrationForm)
+    fields = Fields(IHiddenVerifiedEmail)
+
+    def __init__(self, context, request, form):
+        self.context = context
+        self.request = request
+        self.form = form
+
+    def update(self):
+        self.add(IHiddenVerifiedEmail, prefix="")
+        self.form.fields['confirmed_email'].mode = interfaces.HIDDEN_MODE
+        self.form.fields['confirmed_code'].mode = interfaces.HIDDEN_MODE
+
+
+if HAS_CRC:
+    class CaptchaRegistrationFormExtender(BaseCaptchaRegistrationFormExtender):
+        adapts(Interface, ILayer, RegistrationForm)

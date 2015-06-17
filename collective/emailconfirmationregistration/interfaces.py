@@ -1,5 +1,8 @@
-from zope.interface import Interface
+try:
+    from collective.registrationcaptcha.interfaces import IBrowserLayer as IBaseLayer
+except:
+    from zope.publisher.interfaces.browser import IDefaultBrowserLayer as IBaseLayer
 
 
-class ILayer(Interface):
+class ILayer(IBaseLayer):
     pass
