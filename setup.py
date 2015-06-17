@@ -5,7 +5,8 @@ version = '1.0.0a1'
 
 setup(name='collective.emailconfirmationregistration',
       version=version,
-      description="",
+      description=('Providing an extra verification step for '
+                   'Plone when self-registration is enabled'),
       long_description="%s\n%s" % (
           open("README.rst").read(),
           open(os.path.join("docs", "HISTORY.txt")).read()
