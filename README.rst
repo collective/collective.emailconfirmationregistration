@@ -22,3 +22,22 @@ self-registration setting.
 Installation on plone 4.3
 -------------------------
 You will need to pin the version of plone.app.users to 2.1.0. plone.app.users 2.2.x is Plone 5 only.
+
+
+Recaptcha Support
+-----------------
+
+This package copies the way collective.registrationcaptcha does recapcha support.
+
+Copy of collective.registrationcaptcha documentation::
+
+It depends on plone.app.discussion and uses it's captcha abstaction facilities.
+
+In order to use a captcha widget, you have to install one - wether by depending on the captchawidgets extra of this package or by installing plone.formwidget.captcha, plone.formwidget.recaptcha (not functional at time of this writing) or collective.z3cform.norobots. Then you have to configure plone.app.discussion to use a captcha widget. You don't need to keep the discussion activated, if you don't want them to be active on your site.
+
+
+Install with collective.registrationcaptcha
+-------------------------------------------
+
+This package will override the functionality of collective.registrationcaptcha. You might as well
+remove collective.registrationcaptcha from your site when using this add-on.

@@ -1,7 +1,7 @@
 Changelog
 =========
 
-1.1.0b1 (unreleased)
+1.1.0b1 (2015-06-18)
 --------------------
 
 - implement honey pot field
