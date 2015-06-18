@@ -136,9 +136,9 @@ If that does not work, copy and paste this urls into your web browser: %s
             elif not registration.isValidEmail(email):
                 IStatusMessage(self.request).addStatusMessage(
                     'Must provide valid email address', type='warning')
-            elif not validate_email(email, verify=True):
-                IStatusMessage(self.request).addStatusMessage(
-                    'Could not verify email address you have provided', type='warning')
+            # elif not validate_email(email, verify=True):
+            #    IStatusMessage(self.request).addStatusMessage(
+            #        'Could not verify email address you have provided', type='warning')
             else:
                 storage = Storage(self.context)
                 item = storage.add(email)
