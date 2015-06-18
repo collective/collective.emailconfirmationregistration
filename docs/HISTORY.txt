@@ -1,6 +1,14 @@
 Changelog
 =========
 
+1.1.0b1 (unreleased)
+--------------------
+
+- implement honey pot field
+
+- integrate recaptcha into email check form. This package no longer
+  works with collective.captcha registration
+
 1.0.0a5 (2015-06-17)
 --------------------
 

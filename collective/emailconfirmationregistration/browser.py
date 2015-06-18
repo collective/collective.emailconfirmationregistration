@@ -4,33 +4,32 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 from hashlib import sha1
-from plone.app.users.browser.register import RegistrationForm as OriginalRegistrationForm
-try:
-    from collective.registrationcaptcha.registrationform import CaptchaRegistrationForm as BaseRegistrationForm  # noqa
-except:
-    BaseRegistrationForm = OriginalRegistrationForm
-try:
-    HAS_CRC = True
-    from collective.registrationcaptcha.registrationform import CaptchaRegistrationFormExtender as BaseCaptchaRegistrationFormExtender  # noqa
-except:
-    HAS_CRC = False
+from plone.app.users.browser.register import RegistrationForm as BaseRegistrationForm
+from plone.app.discussion.browser.validator import CaptchaValidator
+from plone.app.discussion.interfaces import ICaptcha
+from plone.app.discussion.interfaces import IDiscussionSettings
+
+from plone.app.users.schema import checkEmailAddress
+from plone.registry.interfaces import IRegistry
+
 import random
 from time import time
-from validate_email import validate_email
 from zope import schema
 
-from zope.component import getMultiAdapter
 from zope.component import getUtility
 from zope.component import adapts
+from zope.component import queryUtility
 
 from zope.interface import Interface
 
-from AccessControl import Unauthorized
+from z3c.form import form
+from z3c.form import button
+
 from BTrees.OOBTree import OOBTree
 from Products.statusmessages.interfaces import IStatusMessage
 from Products.CMFCore.interfaces import ISiteRoot
 from Products.CMFCore.utils import getToolByName
-from Products.Five import BrowserView
+from Products.CMFPlone import PloneMessageFactory as _
 from plone.z3cform.fieldsets import extensible
 from z3c.form import interfaces
 from collective.emailconfirmationregistration.interfaces import ILayer
@@ -39,6 +38,9 @@ from zope.event import notify
 from z3c.form.action import ActionErrorOccurred
 from z3c.form.interfaces import WidgetActionExecutionError
 from zope.interface import Invalid
+from plone.autoform.form import AutoExtensibleForm
+from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
+from plone.z3cform.fieldsets.utils import move
 
 
 def makeRandomCode(length=255):
@@ -47,10 +49,24 @@ def makeRandomCode(length=255):
         datetime.now().microsecond)).hexdigest()[:length]
 
 
-class IHiddenVerifiedEmail(Interface):
+class NonExistentException(Exception):
+    """Dummy exception for usage instead of exceptions from missing plugins.
+    """
 
-    confirmed_email = schema.TextLine()
-    confirmed_code = schema.TextLine()
+try:
+    from plone.app.discussion.browser.validator import WrongNorobotsAnswer
+except ImportError:
+    WrongNorobotsAnswer = NonExistentException
+
+try:
+    from plone.app.discussion.browser.validator import WrongCaptchaCode
+except ImportError:
+    WrongCaptchaCode = NonExistentException
+
+
+def shouldBeEmpty(value):
+    if value:
+        raise Invalid(_(u"This should not have a value"))
 
 
 class Storage(object):
@@ -90,17 +106,43 @@ class Storage(object):
             del self._data[code]
 
 
-class EmailConfirmation(BrowserView):
+class IEmailConfirmation(ICaptcha):
+    email = schema.ASCIILine(
+        title=_(u'label_email', default=u'E-mail'),
+        description=u'',
+        required=True,
+        constraint=checkEmailAddress)
+    username = schema.ASCIILine(
+        required=False,
+        constraint=shouldBeEmpty)
 
+
+class EmailConfirmation(AutoExtensibleForm, form.Form):
+    label = u"Confirm your email address"
+    description = (u"Before you can begin the registration process, you need to "
+                   u"verify your email address.")
+    formErrorsMessage = _('There were errors.')
+    ignoreContext = True
+    schema = IEmailConfirmation
+    enableCSRFProtection = True
+    template = ViewPageTemplateFile('confirm-email.pt')
     sent = False
 
-    def send_mail(self, item):
+    def __init__(self, context, request):
+        super(EmailConfirmation, self).__init__(context, request)
+        registry = queryUtility(IRegistry)
+        settings = registry.forInterface(IDiscussionSettings, check=False)
+        self.captcha = settings.captcha
+        portal_membership = getToolByName(self.context, 'portal_membership')
+        self.isAnon = portal_membership.isAnonymousUser()
+
+    def send_mail(self, email, item):
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "Email Confirmation"
         msg['From'] = getUtility(ISiteRoot).email_from_address
-        msg['To'] = self.get_email()
+        msg['To'] = email
         url = '%s/@@register?confirmed_email=%s&confirmed_code=%s' % (
-            self.context.absolute_url(), self.get_email(), item['code'])
+            self.context.absolute_url(), email, item['code'])
         text = """
 Copy and paste this url into your web browser to confirm your address: %s
 """ % url
@@ -118,35 +160,44 @@ If that does not work, copy and paste this urls into your web browser: %s
         mailhost = getToolByName(self.context, 'MailHost')
         mailhost.send(msg.as_string())
 
-    def get_email(self):
-        return self.request.form.get('form.email')
-
-    def __call__(self):
-        req = self.request
-        if req.REQUEST_METHOD == 'POST':
-            auth = getMultiAdapter((self.context, req), name=u"authenticator")
-            if not auth.verify():
-                raise Unauthorized
-
-            email = self.get_email()
-            registration = getToolByName(self.context, 'portal_registration')
-            if not email:
-                IStatusMessage(self.request).addStatusMessage(
-                    'Must provide email address', type='warning')
-            elif not registration.isValidEmail(email):
-                IStatusMessage(self.request).addStatusMessage(
-                    'Must provide valid email address', type='warning')
-            # elif not validate_email(email, verify=True):
-            #    IStatusMessage(self.request).addStatusMessage(
-            #        'Could not verify email address you have provided', type='warning')
+    def updateFields(self):
+        super(EmailConfirmation, self).updateFields()
+        if self.captcha != 'disabled' and self.isAnon:
+            # Add a captcha field if captcha is enabled in the registry
+            if self.captcha == 'captcha':
+                from plone.formwidget.captcha import CaptchaFieldWidget
+                self.fields['captcha'].widgetFactory = CaptchaFieldWidget
+            elif self.captcha == 'recaptcha':
+                from plone.formwidget.recaptcha import ReCaptchaFieldWidget
+                self.fields['captcha'].widgetFactory = ReCaptchaFieldWidget
+            elif self.captcha == 'norobots':
+                from collective.z3cform.norobots import NorobotsFieldWidget
+                self.fields['captcha'].widgetFactory = NorobotsFieldWidget
             else:
-                storage = Storage(self.context)
-                item = storage.add(email)
-                self.send_mail(item)
-                self.sent = True
-                IStatusMessage(self.request).addStatusMessage(
-                    'Verification email has been sent to your email.', type='info')
-        return self.index()
+                self.fields['captcha'].mode = interfaces.HIDDEN_MODE
+        else:
+            self.fields['captcha'].mode = interfaces.HIDDEN_MODE
+
+        move(self, 'email', before='*')
+
+    def updateWidgets(self):
+        super(EmailConfirmation, self).updateWidgets()
+        # the username field here is ONLY for honey pot.
+        # if a value IS present, throw an error
+        self.widgets['username'].addClass('hiddenStructure')
+
+    @button.buttonAndHandler(
+        _(u'label_verify', default=u'Verify'), name='verify'
+    )
+    def action_verify(self, action):
+        data, errors = self.extractData()
+        if not errors:
+            storage = Storage(self.context)
+            item = storage.add(data['email'])
+            self.send_mail(data['email'], item)
+            self.sent = True
+            IStatusMessage(self.request).addStatusMessage(
+                'Verification email has been sent to your email.', type='info')
 
 
 class RegistrationForm(BaseRegistrationForm):
@@ -179,11 +230,29 @@ class RegistrationForm(BaseRegistrationForm):
         self.widgets['confirmed_code'].value = self.get_confirmed_code()
 
     def validate_registration(self, action, data):
+        registry = queryUtility(IRegistry)
+        settings = registry.forInterface(IDiscussionSettings, check=False)
+        portal_membership = getToolByName(self.context, 'portal_membership')
+        captcha_enabled = settings.captcha != 'disabled'
+        anon = portal_membership.isAnonymousUser()
+        if captcha_enabled and anon:
+            if 'captcha' not in data:
+                data['captcha'] = u""
+            try:
+                captcha = CaptchaValidator(self.context,
+                                           self.request,
+                                           None,
+                                           ICaptcha['captcha'],
+                                           None)
+                captcha.validate(data['captcha'])
+            except (WrongCaptchaCode, WrongNorobotsAnswer):
+                # Error messages are fed in by the captcha widget itself.
+                pass
+
         if 'captcha' in data:
-            super(RegistrationForm, self).validate_registration(action, data)
-        else:
-            # just because it's there, does not mean it's configured
-            OriginalRegistrationForm.validate_registration(self, action, data)
+            del data['captcha']  # delete, so that value isn't stored
+
+        super(RegistrationForm, self).validate_registration(action, data)
         if data['email'].lower() != self.get_confirmed_email().lower():
             err_str = u'Email address you have entered does not match email used in verification'
             notify(
@@ -202,6 +271,12 @@ class RegistrationForm(BaseRegistrationForm):
         return super(RegistrationForm, self).__call__()
 
 
+class IHiddenVerifiedEmail(Interface):
+
+    confirmed_email = schema.TextLine()
+    confirmed_code = schema.TextLine()
+
+
 class EmailConfirmationFormExtender(extensible.FormExtender):
     """Registrationform extender to extend it with the captcha schema.
     """
@@ -213,12 +288,13 @@ class EmailConfirmationFormExtender(extensible.FormExtender):
         self.request = request
         self.form = form
 
+        registry = queryUtility(IRegistry)
+        settings = registry.forInterface(IDiscussionSettings, check=False)
+        self.captcha = settings.captcha
+        portal_membership = getToolByName(self.context, 'portal_membership')
+        self.isAnon = portal_membership.isAnonymousUser()
+
     def update(self):
         self.add(IHiddenVerifiedEmail, prefix="")
         self.form.fields['confirmed_email'].mode = interfaces.HIDDEN_MODE
         self.form.fields['confirmed_code'].mode = interfaces.HIDDEN_MODE
-
-
-if HAS_CRC:
-    class CaptchaRegistrationFormExtender(BaseCaptchaRegistrationFormExtender):
-        adapts(Interface, ILayer, RegistrationForm)
