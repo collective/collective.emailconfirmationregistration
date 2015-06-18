@@ -23,13 +23,6 @@
         provides="plone.z3cform.fieldsets.interfaces.IFormExtender"
         name="collective.emailconfirmationregistration.EmailConfirmationFormExtender"/>
 
-  <configure zcml:condition="installed collective.registrationcaptcha">
-    <adapter
-        factory="collective.registrationcaptcha.registrationform.CaptchaRegistrationFormExtender"
-        provides="plone.z3cform.fieldsets.interfaces.IFormExtender"
-        name="collective.registrationcaptcha.withemailconfirmregistrationform.CaptchaRegistrationFormExtender"/>
-  </configure>
-
   <!-- join form override -->
   <browser:page
       name="register"
