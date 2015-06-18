@@ -253,7 +253,8 @@ class RegistrationForm(BaseRegistrationForm):
             del data['captcha']  # delete, so that value isn't stored
 
         super(RegistrationForm, self).validate_registration(action, data)
-        if data['email'].lower() != self.get_confirmed_email().lower():
+
+        if 'email' in data and data['email'].lower() != self.get_confirmed_email().lower():
             err_str = u'Email address you have entered does not match email used in verification'
             notify(
                 ActionErrorOccurred(
