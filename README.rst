@@ -41,3 +41,12 @@ Install with collective.registrationcaptcha
 
 This package will override the functionality of collective.registrationcaptcha. You might as well
 remove collective.registrationcaptcha from your site when using this add-on.
+
+
+Review registrations
+--------------------
+
+To turn on reviewing registrations before the user is created on the site
+after the user is verified, go to the Configuration registry in
+Site setup(http://site-url/portal_registry), search for "plone.review_registrations"
+and enable this setting.
