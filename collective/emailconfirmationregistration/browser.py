@@ -1,3 +1,4 @@
+from Products.Five import BrowserView
 from datetime import datetime
 
 from email.mime.multipart import MIMEMultipart
@@ -42,6 +43,12 @@ from plone.autoform.form import AutoExtensibleForm
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
 from plone.z3cform.fieldsets.utils import move
 
+import random  # noqa
+try:
+    random = random.SystemRandom()
+except NotImplementedError:
+    pass
+
 
 def makeRandomCode(length=255):
     return sha1(sha1(str(
@@ -69,24 +76,33 @@ def shouldBeEmpty(value):
         raise Invalid(_(u"This should not have a value"))
 
 
-class Storage(object):
+class RegistrationStorage(object):
+
+    attr_name = '_registration_confirmations'
 
     def __init__(self, context):
         self.context = context
         try:
-            self._data = context._registration_confirmations
+            self._data = getattr(context, self.attr_name)
         except AttributeError:
-            self._data = context._registration_confirmations = OOBTree()
+            self._data = OOBTree()
+            setattr(context, self.attr_name, self._data)
 
-    def add(self, email):
+    def add(self, email, data=None):
         self.clean()
         email = email.lower()
-        data = {
+        if data is None:
+            data = {}
+        data.update({
             'created': time(),
             'code': makeRandomCode(100)
-        }
+        })
         self._data[email] = data
         return data
+
+    def remove(self, email):
+        if email.lower() in self._data:
+            del self._data[email.lower()]
 
     def get(self, email):
         return self._data.get(email.lower())
@@ -104,6 +120,10 @@ class Storage(object):
                 delete.append(email)
         for code in delete:
             del self._data[code]
+
+
+class RegistrationReviewStorage(RegistrationStorage):
+    attr_name = '_registrations_under_review'
 
 
 class IEmailConfirmation(ICaptcha):
@@ -192,7 +212,7 @@ If that does not work, copy and paste this urls into your web browser: %s
     def action_verify(self, action):
         data, errors = self.extractData()
         if not errors:
-            storage = Storage(self.context)
+            storage = RegistrationStorage(self.context)
             item = storage.add(data['email'])
             self.send_mail(data['email'], item)
             self.sent = True
@@ -216,7 +236,7 @@ class RegistrationForm(BaseRegistrationForm):
         code = self.get_confirmed_code()
         if not email or not code:
             return False
-        storage = Storage(self.context)
+        storage = RegistrationStorage(self.context)
         entry = storage.get(email)
         if entry is None:
             return False
@@ -264,6 +284,24 @@ class RegistrationForm(BaseRegistrationForm):
         del data['confirmed_email']
         del data['confirmed_code']
 
+    def handle_join_success(self, data):
+        email = self.get_confirmed_email()
+        storage = RegistrationStorage(self.context)
+        storage.remove(email)
+        registry = getUtility(IRegistry)
+        try:
+            review = registry['plone.review_registrations']
+        except KeyError:
+            review = False
+            pass
+        if review:
+            storage = RegistrationReviewStorage(self.context)
+            storage.add(email, data)
+            self.request.response.redirect('%s/@@under-review?email=%s' % (
+                self.context.absolute_url(), email))
+        else:
+            return super(RegistrationForm, self).handle_join_success(data)
+
     def __call__(self):
         if not self.verify():
             return self.request.response.redirect('%s/@@register-confirm-email' % (
@@ -299,3 +337,33 @@ class EmailConfirmationFormExtender(extensible.FormExtender):
         self.add(IHiddenVerifiedEmail, prefix="")
         self.form.fields['confirmed_email'].mode = interfaces.HIDDEN_MODE
         self.form.fields['confirmed_code'].mode = interfaces.HIDDEN_MODE
+
+
+class ReviewRequests(BrowserView):
+
+    def __call__(self):
+        storage = RegistrationReviewStorage(self.context)
+        if self.request.REQUEST_METHOD == 'POST':
+            email = self.request.form.get('email')
+            if self.request.form.get('submit') == 'Approve':
+                data = storage.get(email).copy()
+                data.pop('code')
+                data.pop('created')
+                reg_form = BaseRegistrationForm(self.context, self.request)
+                reg_form.updateFields()
+                reg_form.updateWidgets()
+                reg_form.handle_join_success(data)
+                storage.remove(email)
+            elif self.request.form.get('submit') == 'Deny':
+                storage.remove(email)
+        self.storage = storage
+        self.data = storage._data
+        return self.index()
+
+
+class UnderReview(BrowserView):
+
+    def __call__(self):
+        storage = RegistrationReviewStorage(self.context)
+        self.data = storage.get(self.request.form.get('email'))
+        return self.index()

@@ -32,13 +32,40 @@
       layer=".interfaces.ILayer"
       />
 
-  <browser:page
+    <browser:page
       name="register-confirm-email"
       for="plone.app.layout.navigation.interfaces.INavigationRoot"
       class=".browser.EmailConfirmation"
       permission="cmf.AddPortalMember"
       layer=".interfaces.ILayer"
       template="confirm-email.pt"
+      />
+
+    <browser:page
+      name="under-review"
+      for="plone.app.layout.navigation.interfaces.INavigationRoot"
+      permission="zope2.View"
+      layer=".interfaces.ILayer"
+      template="under-review.pt"
+      class=".browser.UnderReview"
+      />
+
+    <browser:page
+      name="review-registration-requests"
+      for="plone.app.layout.navigation.interfaces.INavigationRoot"
+      class=".browser.ReviewRequests"
+      permission="cmf.ManagePortal"
+      layer=".interfaces.ILayer"
+      template="approve.pt"
+      />
+
+  <genericsetup:upgradeStep
+      title="Upgrade to 1.2"
+      source="*"
+      destination="1200"
+      handler="collective.emailconfirmationregistration.upgrades.upgrade_12"
+      sortkey="1"
+      profile="collective.emailconfirmationregistration:default"
       />
 
 </configure>
