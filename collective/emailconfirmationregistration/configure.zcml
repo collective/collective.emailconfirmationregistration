@@ -68,4 +68,12 @@
       profile="collective.emailconfirmationregistration:default"
       />
 
+  <genericsetup:upgradeStep
+      title="Upgrade to 1.2.0b2"
+      source="*"
+      destination="1201"
+      handler="collective.emailconfirmationregistration.upgrades.upgrade_12"
+      sortkey="1"
+      profile="collective.emailconfirmationregistration:default"
+      />
 </configure>
