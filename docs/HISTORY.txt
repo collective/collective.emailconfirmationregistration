@@ -1,7 +1,7 @@
 Changelog
 =========
 
-1.2.0b3 (unreleased)
+1.2.0b3 (2015-09-09)
 --------------------
 
 - Send email to user that doesn't need to reset their password that they have
