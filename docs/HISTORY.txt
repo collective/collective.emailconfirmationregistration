@@ -1,6 +1,13 @@
 Changelog
 =========
 
+1.2.0b3 (unreleased)
+--------------------
+
+- Added button to enable request review.
+  [maurits]
+
+
 1.2.0b2 (2015-09-07)
 --------------------
 

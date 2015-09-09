@@ -341,11 +341,18 @@ class EmailConfirmationFormExtender(extensible.FormExtender):
 
 class ReviewRequests(BrowserView):
 
+    def enabled(self):
+        registry = getUtility(IRegistry)
+        try:
+            return registry['plone.review_registrations']
+        except KeyError:
+            return False
+
     def __call__(self):
         storage = RegistrationReviewStorage(self.context)
         if self.request.REQUEST_METHOD == 'POST':
             email = self.request.form.get('email')
-            if self.request.form.get('submit') == 'Approve':
+            if self.request.form.get('approve'):
                 data = storage.get(email).copy()
                 data.pop('code')
                 data.pop('created')
@@ -354,8 +361,12 @@ class ReviewRequests(BrowserView):
                 reg_form.updateWidgets()
                 reg_form.handle_join_success(data)
                 storage.remove(email)
-            elif self.request.form.get('submit') == 'Deny':
+            elif self.request.form.get('deny'):
                 storage.remove(email)
+            elif self.request.form.get('enable'):
+                getUtility(IRegistry)['plone.review_registrations'] = True
+            elif self.request.form.get('disable'):
+                getUtility(IRegistry)['plone.review_registrations'] = False
         self.storage = storage
         self.data = storage._data
         return self.index()
