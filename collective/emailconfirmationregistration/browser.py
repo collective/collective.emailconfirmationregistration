@@ -13,7 +13,6 @@ from plone.app.discussion.interfaces import IDiscussionSettings
 from plone.app.users.schema import checkEmailAddress
 from plone.registry.interfaces import IRegistry
 
-import random
 from time import time
 from zope import schema
 
@@ -43,7 +42,7 @@ from plone.autoform.form import AutoExtensibleForm
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
 from plone.z3cform.fieldsets.utils import move
 
-import random  # noqa
+import random
 try:
     random = random.SystemRandom()
 except NotImplementedError:
