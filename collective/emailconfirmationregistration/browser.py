@@ -347,6 +347,34 @@ class ReviewRequests(BrowserView):
         except KeyError:
             return False
 
+    def send_approve_mail(self, email, data):
+        data = data.copy()
+        data['url'] = self.context.absolute_url()
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "User approved"
+        msg['From'] = getUtility(ISiteRoot).email_from_address
+        msg['To'] = email
+        text = """
+Hello %(fullname)s,
+
+The user with username "%(username)s" has been approved.
+
+You can visit the site at: %(url)s
+""" % data
+        html = """
+<p>Hello %(fullname)s,</p>
+
+<p>The user with username "%(username)s" has been approved.</p>
+
+<p>You can visit the site at: <a href="%(url)s">%(url)s</a>
+</p>""" % data
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+        mailhost = getToolByName(self.context, 'MailHost')
+        mailhost.send(msg.as_string())
+
     def __call__(self):
         storage = RegistrationReviewStorage(self.context)
         if self.request.REQUEST_METHOD == 'POST':
@@ -359,6 +387,9 @@ class ReviewRequests(BrowserView):
                 reg_form.updateFields()
                 reg_form.updateWidgets()
                 reg_form.handle_join_success(data)
+                if data.get('password'):
+                    # won't get an email so sent them out something about getting approved
+                    self.send_approve_mail(email, data)
                 storage.remove(email)
             elif self.request.form.get('deny'):
                 storage.remove(email)

@@ -4,6 +4,10 @@ Changelog
 1.2.0b3 (unreleased)
 --------------------
 
+- Send email to user that doesn't need to reset their password that they have
+  been approved.
+  [vangheem]
+
 - Added button to enable request review.
   [maurits]
 
