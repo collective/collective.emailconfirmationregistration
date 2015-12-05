@@ -42,11 +42,26 @@ from plone.autoform.form import AutoExtensibleForm
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
 from plone.z3cform.fieldsets.utils import move
 
+try:
+    from Products.CMFPlone.interfaces.controlpanel import IMailSchema
+    P5 = True
+except:
+    P5 = False
+
 import random
 try:
     random = random.SystemRandom()
 except NotImplementedError:
     pass
+
+
+def getEmailFromAddress():
+    if P5:
+        registry = getUtility(IRegistry)
+        mail_settings = registry.forInterface(IMailSchema, prefix='plone')
+        return mail_settings.email_from_address
+    else:
+        return getUtility(ISiteRoot).email_from_address
 
 
 def makeRandomCode(length=255):
@@ -158,7 +173,7 @@ class EmailConfirmation(AutoExtensibleForm, form.Form):
     def send_mail(self, email, item):
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "Email Confirmation"
-        msg['From'] = getUtility(ISiteRoot).email_from_address
+        msg['From'] = getEmailFromAddress()
         msg['To'] = email
         url = '%s/@@register?confirmed_email=%s&confirmed_code=%s' % (
             self.context.absolute_url(), email, item['code'])
@@ -296,10 +311,45 @@ class RegistrationForm(BaseRegistrationForm):
         if review:
             storage = RegistrationReviewStorage(self.context)
             storage.add(email, data)
+            self.send_email_to_admin_to_review(email)
             self.request.response.redirect('%s/@@under-review?email=%s' % (
                 self.context.absolute_url(), email))
         else:
             return super(RegistrationForm, self).handle_join_success(data)
+
+    def send_email_to_admin_to_review(self, email):
+        msg = MIMEMultipart('alternative')
+        msg['Subject'] = "User registration needs review"
+        msg['From'] = msg['To'] = getEmailFromAddress()
+        url = '%s/@@review-registration-requests' % (
+            self.context.absolute_url())
+        text = """
+Hi,
+
+A new user with the email %(email)s has signed up.
+
+You can review the request at %(url)s
+""" % {
+            'url': url,
+            'email': email
+        }
+        html = """
+<p>Hi,</p>
+
+A new user with the email %(email)s has signed up.
+
+Please <a href="%s">review the request</a>
+
+</p>""" % {
+            'url': url,
+            'email': email
+        }
+        part1 = MIMEText(text, 'plain')
+        part2 = MIMEText(html, 'html')
+        msg.attach(part1)
+        msg.attach(part2)
+        mailhost = getToolByName(self.context, 'MailHost')
+        mailhost.send(msg.as_string())
 
     def __call__(self):
         if not self.verify():
@@ -352,7 +402,7 @@ class ReviewRequests(BrowserView):
         data['url'] = self.context.absolute_url()
         msg = MIMEMultipart('alternative')
         msg['Subject'] = "User approved"
-        msg['From'] = getUtility(ISiteRoot).email_from_address
+        msg['From'] = getEmailFromAddress()
         msg['To'] = email
         text = """
 Hello %(fullname)s,
