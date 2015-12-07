@@ -1,6 +1,10 @@
 Changelog
 =========
 
+1.2.0b5 (2015-12-06)
+--------------------
+
+- fix notification issue
 
 1.2.0b4 (2015-12-05)
 --------------------
@@ -8,6 +12,7 @@ Changelog
 - plone 5 support
 
 - send email to admins warning them they need to review request
+
 
 1.2.0b3 (2015-09-09)
 --------------------
