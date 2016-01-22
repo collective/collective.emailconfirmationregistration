@@ -16,6 +16,8 @@ setup(name='collective.emailconfirmationregistration',
       classifiers=[
           "Framework :: Plone",
           "Programming Language :: Python",
+          "Framework :: Plone :: 4.3",
+          "Framework :: Plone :: 5.0",
       ],
       keywords='plone customizations',
       author='Nathan Van Gheem',
